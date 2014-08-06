@@ -7,13 +7,9 @@
         <title>Tower Defense</title>
         <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/phaser/2.0.6/phaser.min.js"></script>
         <script type="text/javascript" src="https://s3.amazonaws.com/easystar/easystar-0.1.8.min.js"></script>
-        <script type="text/javascript" src="bin/phaser_pathfinding-0.2.0.min.js"></script>
-
         <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
-
-        <script type="text/javascript" src="bin/phaser_pathfinding-0.2.0.js"></script>
-
-
+        <script type="text/javascript" src="js/Enemy.class.js"></script>
+        <script type="text/javascript" src="js/Tower.class.js"></script>
         <style>
             *{
                 margin : 0;
@@ -24,139 +20,133 @@
 
     </body>
     <script type="text/javascript">
-
+        var bulletTime = 0;
         var game = new Phaser.Game(800, 600, Phaser.CANVAS, 'gameContainer', {preload: preload, create: create, update: update, render: render});
         var tileSquare = 32;
         var map, layer;
-        var pathForbiden = ["012", "112", "212", "312", "412", "512", "511", "510", "59", "58", "68", "78", "88", "98", "108", "118", "128", "138", "139", "1310", "1311", "1312", "1313", "1314", "1315", "1316", "1416", "1516", "1616", "1716", "1816", "1916", "2016", "2116", "2115", "2114", "2113", "2213", "2313", "2413", "2513"]
+        var tileForbiden = ["9", "10", "111", "112", "211", "212", "311", "312", "411", "412", "511", "512", "510", "59", "58", "68", "78", "88", "98", "108", "118", "128", "138", "139", "1310", "1311", "1312", "1313", "1314", "1315", "1316", "1416", "1516", "1616", "1716", "1816", "1916", "2016", "2116", "2115", "2114", "2113", "2213", "2313", "2413", "2513"]
         var path = [{x: 0, y: 12}, {x: 1, y: 12}, {x: 2, y: 12}, {x: 3, y: 12}, {x: 4, y: 12}, {x: 5, y: 12}, {x: 5, y: 11}, {x: 5, y: 10}, {x: 5, y: 9}, {x: 5, y: 8}, {x: 6, y: 8}, {x: 7, y: 8}, {x: 8, y: 8}, {x: 9, y: 8}, {x: 10, y: 8}, {x: 11, y: 8}, {x: 12, y: 8}, {x: 13, y: 8},
             {x: 13, y: 9}, {x: 13, y: 10}, {x: 13, y: 11}, {x: 13, y: 12}, {x: 13, y: 13}, {x: 13, y: 14}, {x: 13, y: 15}, {x: 13, y: 16}, {x: 14, y: 16}, {x: 15, y: 16}, {x: 16, y: 16}, {x: 17, y: 16}, {x: 18, y: 16}, {x: 19, y: 16}, {x: 20, y: 16}, {x: 21, y: 16}, {x: 21, y: 15},
             {x: 21, y: 14}, {x: 21, y: 13}, {x: 22, y: 13}, {x: 23, y: 13}, {x: 24, y: 13}, {x: 25, y: 13}];
-
-        var car, car2;
-        var towers
-
+        var enemysAnimation = [{'name': 'duck', 'length': 8}, {'name': 'panda', 'length': 3}, {'name': 'dog', 'length': 6}, {'name': 'penguin', 'length': 4}];
+        var car, car2, duck;
+        var towers;
+        var canAddTower = true;
+        var bulletsTowers, explosions, cursors, fireButton;
         function preload() {
+            game.load.tilemap('desert', 'assets/maps/tower-defense.json', null, Phaser.Tilemap.TILED_JSON);
+            game.load.image('tiles', 'assets/maps/tmw_desert_spacing.png');
+            game.load.image('car', 'assets/sprites/car90.png');
 
-            game.load.tilemap('desert', 'assets/tower-defense.json', null, Phaser.Tilemap.TILED_JSON);
-            game.load.image('tiles', 'assets/tmw_desert_spacing.png');
-            game.load.image('car', 'assets/car90.png');
-            game.load.image('tower', 'assets/tower-32.png');
+            game.load.image('tower', 'assets/sprites/tower-32.png');
+            game.load.image('bullet', 'assets/sprites/bullet.png');
+            /*
+             * Enemy Preload
+             */
+            game.load.spritesheet('duck', 'assets/sprites/duck.png', 32, 32, 8);
+            game.load.spritesheet('panda', 'assets/sprites/panda.png', 32, 32, 3);
+            game.load.spritesheet('dog', 'assets/sprites/dog.png', 32, 32, 6);
+            game.load.spritesheet('penguin', 'assets/sprites/penguin.png', 32, 32, 4);
         }
 
 
         function create() {
+
             /**
              * Init map
              */
+            game.physics.startSystem(Phaser.Physics.ARCADE)
             map = game.add.tilemap('desert');
             map.addTilesetImage('Desert', 'tiles');
             layer = map.createLayer('Ground');
             layer.resizeWorld();
-            game.input.onDown.add(listener, this);
+            //game.input.onDown.add(listener, this);
             /*
              * Tower
              */
+
             towers = game.add.group();
+            game.physics.enable(towers, Phaser.Physics.ARCADE);
+            /*
+             * Towers Bullets
+             */
+            bullets = game.add.group();
+            bullets.enableBody = true;
+            bullets.physicsBodyType = Phaser.Physics.ARCADE;
+            bullets.createMultiple(30, 'bullet');
+            bullets.setAll('anchor.x', 0.5);
+            bullets.setAll('anchor.y', 1);
+            bullets.setAll('outOfBoundsKill', true);
+            bullets.setAll('checkWorldBounds', true);
+
             /*
              * Enemy
              */
-            car = game.add.sprite(path[0].x * tileSquare, path[0].y * tileSquare, 'car');
-            car.anchor.setTo(0.5, 0.5);
-            car.speed = 5;
-            car.speedX = 0;
-            car.speedY = 0;
-            car.curTile = 0;
-            car.debug = true;
-            nextTile(car);
+            enemys = game.add.group();
+            enemys.enableBody = true;
+            enemys.physicsBodyType = Phaser.Physics.ARCADE;
 
-            car2 = game.add.sprite(path[0].x * tileSquare, path[0].y * tileSquare, 'car');
-            car2.anchor.setTo(0.5, 0.5);
-            car2.speed = 2;
-            car2.speedX = 0;
-            car2.speedY = 0;
-            car2.curTile = 0;
-            car2.debug = true;
-            nextTile(car2);
-
-        }
-
-        function moveElmt(elmt) {
-
-            elmt.x += elmt.speedX;
-            elmt.y += elmt.speedY;
-
-            if (elmt.speedX > 0 && elmt.x >= elmt.next_positX) {
-                elmt.x = elmt.next_positX;
-                nextTile(elmt);
-            }
-            else if (elmt.speedX < 0 && elmt.x <= elmt.next_positX) {
-                elmt.x = elmt.next_positX;
-                nextTile(elmt);
-            }
-            else if (elmt.speedY > 0 && elmt.y >= elmt.next_positY) {
-                elmt.y = elmt.next_positY;
-                nextTile(elmt);
-            }
-            else if (elmt.speedY < 0 && elmt.y <= elmt.next_positY) {
-                elmt.y = elmt.next_positY;
-                nextTile(elmt);
-            }
+            generateEnemy();
 
 
+            var text = "+ Enemy";
+            var style = {font: "15px Arial", fill: "#ff0044", align: "center"};
+            var t = game.add.text(700, 20, text, style);
+            t.tint = "#000";
+            t.inputEnabled = true;
+            t.events.onInputDown.add(generateEnemy, this);
+            var text = "+ Tower";
+            var style = {font: "15px Arial", fill: "#ff0044", align: "center"};
+            var t = game.add.text(700, 40, text, style);
+            t.tint = "#000";
+            t.inputEnabled = true;
+            t.events.onInputDown.add(Tower.prototype.add(), this);            
 
         }
-
-        function nextTile(elmt) {
-            elmt.curTile++;
-            elmt.next_positX = parseInt(path[elmt.curTile].x * tileSquare);
-            elmt.next_positY = parseInt(path[elmt.curTile].y * tileSquare);
-            // on check le sens gauche/droite
-            if (elmt.next_positX > elmt.x) {
-                elmt.speedX = elmt.speed;
-                elmt.angle = 0;
-            } else if (elmt.next_positX < elmt.x) {
-                elmt.speedX = -elmt.speed;
-                elmt.angle = 180;
-            } else {
-                elmt.speedX = 0;
-            }
-            // on check le sens haut/bas
-            if (elmt.next_positY > elmt.y) {
-                elmt.speedY = elmt.speed;
-                elmt.angle = 90;
-            } else if (elmt.next_positY < elmt.y) {
-                elmt.speedY = -elmt.speed;
-                elmt.angle = -90;
-            } else {
-                elmt.speedY = 0;
-            }
-        }
-
         function render() {
 
         }
-
         function update() {
-
-            moveElmt(car);
-            moveElmt(car2);
+            /*
+             * Generate Enemy
+             */
+            enemys.forEach(function(enemy) {
+                Enemy.prototype.moveElmt(enemy);
+            });
+            /*
+             * ower fire
+             */
+            towers.forEach(function(tower) {
+                Tower.prototype.fire(tower);
+            });
+            //  Run collision
+            game.physics.arcade.overlap(bullets, enemys, collisionHandler, null, this);
         }
-
-
         function listener(pointer) {
-
-            var tileworldX = pointer.worldX - (pointer.worldX % tileSquare);
-            var tileworldY = pointer.worldY - (pointer.worldY % tileSquare);
-            var tileX = Math.floor(pointer.worldX / tileSquare);
-            var tileY = Math.floor(pointer.worldY / tileSquare);
-
-            var index = String(tileX + "" + tileY)
-            if ($.inArray(index, pathForbiden) == -1) {
-                towers.create(tileworldX, tileworldY, 'tower')
+            if (canAddTower) {
+                /*
+                 * Add tower
+                 */
+                Tower.prototype.add(pointer);
             }
         }
+        function collisionHandler(bullet, enemy) {
+            bullet.kill();
+            enemy.destroy();
+        }
 
+        function generateEnemy() {
+            var i = 0;
+            var enemysBcl = setInterval(function() {
+                if (i < 5) {
+                    var animEnemy = enemysAnimation[parseInt(Math.random() * enemysAnimation.length)];
+                    new Enemy(path[0].x * tileSquare, path[0].y * tileSquare, animEnemy.name, animEnemy.length);
+                } else {
+                    clearTimeout(enemysBcl);
+                }
+                i++;
+            }, 1000);
+        }
 
     </script>
 </html>
